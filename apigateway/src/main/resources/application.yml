@@ -8,6 +8,6 @@ spring:
     gateway:
       routes:
         - id: identity-service-route
-          uri: ${IDENTITY_SERVER_URL}
+          uri: http://localhost:8081
           predicates:
             - Path=/api/identity/**
