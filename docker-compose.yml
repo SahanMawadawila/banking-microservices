@@ -1,0 +1,316 @@
+version: '3.8'
+
+services:
+  # ========================
+  # Infrastructure Services
+  # ========================
+
+  # PostgreSQL for Identity Service
+  postgres-identity:
+    image: postgres:16-alpine
+    container_name: postgres-identity
+    environment:
+      POSTGRES_DB: banking_identity
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-identity-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-network
+
+  # PostgreSQL for Account Service
+  postgres-accounts:
+    image: postgres:16-alpine
+    container_name: postgres-accounts
+    environment:
+      POSTGRES_DB: banking_accounts
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-accounts-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-network
+
+  # PostgreSQL for Transaction Service
+  postgres-transactions:
+    image: postgres:16-alpine
+    container_name: postgres-transactions
+    environment:
+      POSTGRES_DB: banking_transactions
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-transactions-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-network
+
+  # PostgreSQL for Loan Service
+  postgres-loans:
+    image: postgres:16-alpine
+    container_name: postgres-loans
+    environment:
+      POSTGRES_DB: banking_loans
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres-loans-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-network
+
+  # MongoDB for Notification Service
+  mongodb-notifications:
+    image: mongo:7
+    container_name: mongodb-notifications
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-notifications-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-network
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"   # AMQP protocol
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - banking-network
+
+  # ========================
+  # Application Services
+  # ========================
+
+  # Identity Service (Authentication & User Management)
+  identity-service:
+    build:
+      context: ./identity-service
+      dockerfile: Dockerfile
+    container_name: identity-service
+    ports:
+      - "8081:8081"
+    environment:
+      POSTGRES_HOST: postgres-identity
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_identity
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      JWT_SECRET: MyBankingSuperSecretKeyThatIsAtLeast32CharactersLong2024
+    depends_on:
+      postgres-identity:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - banking-network
+    restart: on-failure
+
+  # Account Service
+  account-service:
+    build:
+      context: ./account-service
+      dockerfile: Dockerfile
+    container_name: account-service
+    ports:
+      - "8082:8082"
+    environment:
+      POSTGRES_HOST: postgres-accounts
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_accounts
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      postgres-accounts:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - banking-network
+    restart: on-failure
+
+  # Transaction Service
+  transaction-service:
+    build:
+      context: ./transaction-service
+      dockerfile: Dockerfile
+    container_name: transaction-service
+    ports:
+      - "8083:8083"
+    environment:
+      POSTGRES_HOST: postgres-transactions
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_transactions
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      ACCOUNT_SERVICE_URL: http://account-service:8082
+    depends_on:
+      postgres-transactions:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - banking-network
+    restart: on-failure
+
+  # Loan Service
+  loan-service:
+    build:
+      context: ./loan-service
+      dockerfile: Dockerfile
+    container_name: loan-service
+    ports:
+      - "8084:8084"
+    environment:
+      POSTGRES_HOST: postgres-loans
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: banking_loans
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      postgres-loans:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - banking-network
+    restart: on-failure
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    ports:
+      - "8085:8085"
+    environment:
+      MONGODB_URI: mongodb://mongodb-notifications:27017/banking_notifications
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+    depends_on:
+      mongodb-notifications:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - banking-network
+    restart: on-failure
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./apigateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      IDENTITY_SERVICE_URL: http://identity-service:8081
+      ACCOUNT_SERVICE_URL: http://account-service:8082
+      TRANSACTION_SERVICE_URL: http://transaction-service:8083
+      LOAN_SERVICE_URL: http://loan-service:8084
+      NOTIFICATION_SERVICE_URL: http://notification-service:8085
+      JWT_SECRET: MyBankingSuperSecretKeyThatIsAtLeast32CharactersLong2024
+    depends_on:
+      - identity-service
+      - account-service
+      - transaction-service
+      - loan-service
+      - notification-service
+    networks:
+      - banking-network
+    restart: on-failure
+
+  # Frontend Web App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - banking-network
+    restart: on-failure
+
+# ========================
+# Volumes
+# ========================
+volumes:
+  postgres-identity-data:
+  postgres-accounts-data:
+  postgres-transactions-data:
+  postgres-loans-data:
+  mongodb-notifications-data:
+  rabbitmq-data:
+
+# ========================
+# Networks
+# ========================
+networks:
+  banking-network:
+    driver: bridge

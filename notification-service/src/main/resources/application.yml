@@ -1,0 +1,20 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: notification-service
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/banking_notifications}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
