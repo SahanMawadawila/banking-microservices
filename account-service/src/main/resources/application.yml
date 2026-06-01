@@ -26,4 +26,9 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: "*"
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
